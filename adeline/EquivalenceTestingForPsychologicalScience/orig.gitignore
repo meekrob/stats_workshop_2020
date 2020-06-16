@@ -1,0 +1,14 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+.html
+.pdf
+manuscript.aux
+manuscript.fff
+manuscript.log
+manuscript.out
+manuscript.pdf
+manuscript.tex
+manuscript_files/

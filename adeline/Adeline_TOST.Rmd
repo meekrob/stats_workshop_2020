@@ -1,0 +1,208 @@
+---
+title: "Statistical test for NO difference"
+subtitle: "Equivalence Testing for Psychological Research: A Tutorial"
+citation: "Advances in Methods and Practices in Psychological Science, 2018"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: powerpoint_presentation
+---
+
+- Statistical (hypothesis) tests are oriented to test for differences
+- The null hypothesis states "no difference"; *rejecting* the null hypothesis implies there is a difference.
+- p-value is the probability of seeing the observed magnitude change (or higher) if the null were true.
+- How do we do the inverse? How do we get a p-value for two things being equal?
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(readxl)
+library(reshape2)
+library(ggplot2)
+library(TOSTER)
+
+```
+
+```{r confint, echo=F}
+
+confint = function(data, conf.int=.95)
+{
+  n = length(data)
+  m = mean(data)
+  s = sd(data)
+  se = s/sqrt(n)
+  ci = se * qt(conf.int/2 + .5, df=n-1)
+  return( c(-ci,0,ci) + m)
+}
+
+pooled_sd = function(x1,x2) {
+  sd1 = sd(x1)
+  sd2 = sd(x2)
+  n1 = length(x1)
+  n2 = length(x2)
+  
+  sqrt( ((n1-1)*sd1^2 + (n2-1)*sd2^2) / (n1+n2-2)  )
+}
+
+welch_s_delta = function(x1,x2) {
+  sd1 = sd(x1)
+  sd2 = sd(x2)
+  n1 = length(x1)
+  n2 = length(x2)
+  sqrt( (sd1^2/n1) + (sd2^2/n2))
+}
+
+```
+
+## Are these two samples the same? 
+
+```{r data, echo = FALSE,fig.width=3.35}
+xls = read_xlsx('21820 NS34A IT PRVABC59.xlsx',2)
+# use a log2 of the raw data, so that later we can express a 2 fold change as
+# one integral unit on the X-axis
+BF2Log2 = log(xls$BF2,2)
+BF4Log2 = log(xls$BF4,2)
+
+data = data.frame(control=BF2Log2, antiNS3_4A=BF4Log2)
+tidydata = melt(
+  data,
+  measure.vars = c(1, 2),
+  variable.name = "group",
+  value.name = "viral titre"
+)
+baseplot <- ggplot(tidydata, aes(x = group, y = `viral titre`)) + 
+  scale_y_continuous(limits = c(15, 24)) + 
+  labs(y="Log2 (Plaque Forming Units/mL) ZIKV", x="experimental group") +     
+    geom_point(aes(fill=group), color='black', stroke=1, size=2, shape=21,
+    position = position_jitter(seed=0,width=.15)) +    
+    scale_fill_manual(values=c("#F3B77C","#244AFC")) +
+  theme_classic() + theme(legend.position="none") +  labs(title="Viral titre in infected mosquitos")
+
+
+plot1 <- baseplot +
+  geom_boxplot(outlier.shape = NA, fill="white",alpha=.2,width=.5) +
+  labs(subtitle="line - median, box - interquartile range")
+      
+  
+print(plot1)
+```
+
+
+### Same plot, mean and confidence intervals
+``` {r ci, echo=FALSE, fig.width=3.35}
+plot2 <- baseplot +
+  stat_summary(fun.data = "mean_se", fill="white", alpha=.2, size=.5, color = "red", geom = "crossbar",width=.5) +
+  labs(subtitle="Mean, 95% confidence interval")
+print(plot2 + ylab(element_blank()))
+```
+
+### T-test (unequal means)
+``` {r t-test}
+t_unequal_means = t.test(BF2Log2,BF4Log2)
+diff_in_means = abs( diff( c(mean(BF2Log2), mean(BF4Log2) ) ) )
+sdw = welch_s_delta(BF2Log2,BF4Log2)
+cv = qt(.975, t_unequal_means$parameter)*sdw # critical value for two-tailed, alpha=.05
+plot_t = function(x,mu,df) { dt((x-mu)/sdw, df=df)}
+xleft=-1.01;xright=1.01
+xseries=seq(xleft,xright,length.out=250)
+yseries=plot_t(xseries,mu=0,df=t_unequal_means$parameter)
+gg=data.frame(x=xseries,y=yseries,  
+              yleft=plot_t(xseries,  
+                    mu=-1,
+                    df=t_unequal_means$parameter),
+               yright=plot_t(xseries,  
+                    mu=1,
+                    df=t_unequal_means$parameter)
+               )
+#ggplot(gg) + theme_classic() +
+  ylim(0,.4,expand=c(0,0)) + 
+  xlim(xleft,xright) +
+  geom_hline(yintercept=0) +
+  geom_vline(xintercept=c(-1,1),linetype=2) +
+  geom_vline(xintercept=c(0),linetype=2,color="grey") +
+  geom_vline(xintercept=diff_in_means, color='red') + 
+  xlab("difference in means") +
+  ylab("probability distribution (t statistic)") -> distbaseplot
+  
+  distbaseplot + stat_function(fun=plot_t,args=list(mu=0,df=t_unequal_means$parameter)) +
+    #geom_vline(xintercept=c(-1,1)*cv, color='blue',linetype=3,size=.4) + 
+  geom_linerange(data=gg[abs(gg$x)>cv,], aes(x,ymin=0,ymax=y), color='blue') +
+  labs(title="t-test for unequal means", subtitle=sprintf("Observed difference: %.3f (red line) ≠ 0",diff_in_means ),caption=sprintf("Critical values (dashed blue line): |%.3f|; p-value=%.3f", cv, t_unequal_means$p.value))
+```
+
+### If a p-value < .05 means there is a difference, doesn't a high p-value(say, > .95) mean no difference?
+
+- Not necessarily. P-values are oriented to reject a null hypothesis, not accept one.
+- How do we define (and possibly reject) a null hypothesis of **change**? The classical tests are null hypothesis = no change.
+- How do we test for ***no difference?*** 
+
+### Testing for equivalence 
+
+- Step 1: Pre-define the smallest effect of interest. We will discuss the choice of smallest effect size later. 
+- This dataset: 2-fold change is the benchmark in the lab. In log2 space, this is ±1.
+- Step 2: Define the lower and upper equivalence bounds based on Step 1.
+- Step 3: Perform a one-sided test against each boundary: 1) observed > -1; 2) observed < 1;
+- Step 4: If both tests pass (p1 < alpha *and* p2 < alpha), *conclude **no difference** between the groups.* Report the higher p-value.
+
+``` {r visualize-cis}
+cv2 = qt(.05, t_unequal_means$parameter)*sdw + 1 # a critical value for mu=1
+between = function(x, xmin, xmax) {
+  (x > xmin) & (x < xmax)
+}
+xleft=-1.1; xright=1.1
+xseries=seq(xleft,xright,length.out=250)
+gg2=data.frame(x=xseries,
+               yleft=plot_t(xseries,  
+                    mu=-1,
+                    df=t_unequal_means$parameter),
+               yright=plot_t(xseries,  
+                    mu=1,
+                    df=t_unequal_means$parameter)
+               )
+
+
+distbaseplot + 
+  #geom_vline(xintercept=c(-1)*cv2, color='#8080FF',linetype=2,size=.4) + 
+  #geom_vline(xintercept=c(1)*cv2, color='blue',linetype=2,size=.4) + 
+  stat_function(fun=plot_t,args=list(mu=-1,df=t_unequal_means$parameter)) +
+  stat_function(fun=plot_t,args=list(mu=1,df=t_unequal_means$parameter)) +
+  geom_linerange(data=gg[between(gg$x,-cv2,0),], aes(x,ymin=0,ymax=yleft), color='#8080FF') +
+  geom_linerange(data=gg[between(gg$x,0,cv2),], aes(x,ymin=0,ymax=yright), color='blue') +
+  labs(title="Two one-sided t-tests for equivalence", subtitle=sprintf("[ -1 < %.3f < 1 ]",diff_in_means ),caption=sprintf("Red line is inside the rejection regions of both tests")) +
+  xlab("difference in means") +
+  ylab("probability distribution (t statistic)")
+
+```
+
+## TOST: Two One-sided Tests
+
+R-Package: TOSTER. Plot is simpler.
+
+```{r Two One-Sided Test, echo = TRUE}
+
+TOSTtwo.raw( mean(BF2Log2), mean(BF4Log2), 
+         sd(BF2Log2), sd(BF4Log2), 
+         length(BF2Log2), length(BF4Log2),  
+         low_eqbound = -1, 
+         high_eqbound = 1, alpha=.05) 
+
+
+```
+
+## Choice of smallest effect size of interest (SESOI)
+
+Tutorial (Lakëns et al., 2018) discussion.
+
+### Just-noticeable difference. Burriss et al., 2015:
+
+Research question: Do ovulating women signal men by becoming more flush in the face?
+
+- NIH funded research?
+- Maybelline?
+
+Just-noticeable difference: Change in face redness perceptable by men.
+
+Authors' conclusions: women do become more flush, but not enough to be discernable by the naked eye. (Maybelline withdraws funding)
+
+### Statistical Power, no laughing matter
+
+  - What **effect size** can we detect at alpha=.05, sample size n, power=.8?
+  - **Effect size** in units of *Cohen's d.*
+  - Run TOST using **effect size**, rather than raw value.
