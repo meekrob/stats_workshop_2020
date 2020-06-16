@@ -100,7 +100,7 @@ diff_in_means = abs( diff( c(mean(BF2Log2), mean(BF4Log2) ) ) )
 sdw = welch_s_delta(BF2Log2,BF4Log2)
 cv = qt(.975, t_unequal_means$parameter)*sdw # critical value for two-tailed, alpha=.05
 plot_t = function(x,mu,df) { dt((x-mu)/sdw, df=df)}
-xleft=-1.01;xright=1.01
+xleft=-1;xright=1
 xseries=seq(xleft,xright,length.out=250)
 yseries=plot_t(xseries,mu=0,df=t_unequal_means$parameter)
 gg=data.frame(x=xseries,y=yseries,  
@@ -111,9 +111,8 @@ gg=data.frame(x=xseries,y=yseries,
                     mu=1,
                     df=t_unequal_means$parameter)
                )
-#ggplot(gg) + theme_classic() +
-  ylim(0,.4,expand=c(0,0)) + 
-  xlim(xleft,xright) +
+ggplot(gg) + theme_classic() +
+  coord_cartesian(ylim=c(0,.4), xlim=c(-1.1,1.1), expand=F) + 
   geom_hline(yintercept=0) +
   geom_vline(xintercept=c(-1,1),linetype=2) +
   geom_vline(xintercept=c(0),linetype=2,color="grey") +
@@ -122,7 +121,6 @@ gg=data.frame(x=xseries,y=yseries,
   ylab("probability distribution (t statistic)") -> distbaseplot
   
   distbaseplot + stat_function(fun=plot_t,args=list(mu=0,df=t_unequal_means$parameter)) +
-    #geom_vline(xintercept=c(-1,1)*cv, color='blue',linetype=3,size=.4) + 
   geom_linerange(data=gg[abs(gg$x)>cv,], aes(x,ymin=0,ymax=y), color='blue') +
   labs(title="t-test for unequal means", subtitle=sprintf("Observed difference: %.3f (red line) ≠ 0",diff_in_means ),caption=sprintf("Critical values (dashed blue line): |%.3f|; p-value=%.3f", cv, t_unequal_means$p.value))
 ```
@@ -146,23 +144,12 @@ cv2 = qt(.05, t_unequal_means$parameter)*sdw + 1 # a critical value for mu=1
 between = function(x, xmin, xmax) {
   (x > xmin) & (x < xmax)
 }
-xleft=-1.1; xright=1.1
-xseries=seq(xleft,xright,length.out=250)
-gg2=data.frame(x=xseries,
-               yleft=plot_t(xseries,  
-                    mu=-1,
-                    df=t_unequal_means$parameter),
-               yright=plot_t(xseries,  
-                    mu=1,
-                    df=t_unequal_means$parameter)
-               )
-
 
 distbaseplot + 
   #geom_vline(xintercept=c(-1)*cv2, color='#8080FF',linetype=2,size=.4) + 
   #geom_vline(xintercept=c(1)*cv2, color='blue',linetype=2,size=.4) + 
-  stat_function(fun=plot_t,args=list(mu=-1,df=t_unequal_means$parameter)) +
-  stat_function(fun=plot_t,args=list(mu=1,df=t_unequal_means$parameter)) +
+  stat_function(fun=plot_t,args=list(mu=-1,df=t_unequal_means$parameter),xlim=c(-1.2,1.2)) +
+  stat_function(fun=plot_t,args=list(mu=1,df=t_unequal_means$parameter),xlim=c(-1.2,1.2)) +
   geom_linerange(data=gg[between(gg$x,-cv2,0),], aes(x,ymin=0,ymax=yleft), color='#8080FF') +
   geom_linerange(data=gg[between(gg$x,0,cv2),], aes(x,ymin=0,ymax=yright), color='blue') +
   labs(title="Two one-sided t-tests for equivalence", subtitle=sprintf("[ -1 < %.3f < 1 ]",diff_in_means ),caption=sprintf("Red line is inside the rejection regions of both tests")) +
